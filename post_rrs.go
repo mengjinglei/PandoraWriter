@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	_ "fmt"
 	"github.com/qiniu/log.v1"
 	"io/ioutil"
 	"net/http"
@@ -13,7 +13,7 @@ import (
 func get(cmd, action, url string, dat []byte) {
 
 	client := &http.Client{}
-	fmt.Println(">>>>>>> "+cmd, "url", url)
+	log.Info(">>>>>>> "+cmd, "url", url)
 	req, err := http.NewRequest(action, url, bytes.NewBuffer(dat))
 	if err != nil {
 		log.Error(err)
@@ -36,7 +36,9 @@ func get(cmd, action, url string, dat []byte) {
 		log.Error(err)
 	}
 	if string(_bytes) == "{}" {
-		fmt.Println("ok")
+		log.Info("ok")
+	} else {
+		log.Error(string(_bytes))
 	}
 }
 
@@ -70,9 +72,9 @@ func writeto(cmd, action, url string, dat []byte, method string) {
 		log.Error(err)
 	}
 	if string(_bytes) == "{}" {
-		fmt.Println("ok")
+		log.Info("ok")
 	} else {
-		fmt.Println(string(_bytes))
+		log.Info(string(_bytes))
 	}
 }
 
@@ -144,35 +146,38 @@ func Create(url string) string {
 
 func createCq(url, repoid string, n int64) {
 
-	time.Sleep(time.Duration(n*100) * time.Millisecond)
+	if n < 10 {
+		n = 10
+	}
+	time.Sleep(time.Duration(n) * time.Second)
 
 	url = "http://" + url
 	//cpu
 	createCqParams := []byte(`{
 			"retention" : "qiniu_evm",
-			"sql": "SELECT mean(value) as value INTO cpu_2m_mean FROM cpu GROUP BY time(2m), region"
+			"sql": "SELECT mean(value) as value INTO cpu_2m_mean FROM cpu where time < now() GROUP BY time(2m), region"
 		}`)
 
-	get("create cq: cpu_2m_mean", "POST", url+"/v1/repos/"+repoid+"/views/cpu_2m_mean_new", createCqParams)
+	get("create cq: cpu_2m_mean", "POST", url+"/v1/repos/"+repoid+"/views/cpu_2m_mean", createCqParams)
 
 	createCqParams = []byte(`{
 			"retention" : "qiniu_evm",
-			"sql": "SELECT count(value) as value INTO cpu_2m_count FROM cpu GROUP BY time(2m), region"
+			"sql": "SELECT count(value) as value INTO cpu_2m_count FROM cpu where time < now() GROUP BY time(2m), region"
 		}`)
 
-	get("create cq: cpu_2m_count", "POST", url+"/v1/repos/"+repoid+"/views/cpu_2m_count_new", createCqParams)
+	get("create cq: cpu_2m_count", "POST", url+"/v1/repos/"+repoid+"/views/cpu_2m_count", createCqParams)
 
-	//mem
+	/*//mem
 	createCqParams = []byte(`{
 			"retention" : "qiniu_evm",
-			"sql": "SELECT mean(value) as value INTO mem_2m_count FROM mem GROUP BY time(2m), region"
+			"sql": "SELECT mean(value) as value INTO mem_2m_count FROM mem where time < now() GROUP BY time(2m), region"
 		}`)
 
 	get("create cq: mem_2m_count", "POST", url+"/v1/repos/"+repoid+"/views/mem_2m_count", createCqParams)
 
 	createCqParams = []byte(`{
 			"retention" : "qiniu_evm",
-			"sql": "SELECT count(value) as value INTO mem_2m_mean FROM mem GROUP BY time(2m), region"
+			"sql": "SELECT count(value) as value INTO mem_2m_mean FROM mem  where time < now() GROUP BY time(2m), region"
 		}`)
 
 	get("create cq: mem_2m_mean", "POST", url+"/v1/repos/"+repoid+"/views/mem_2m_mean", createCqParams)
@@ -180,16 +185,16 @@ func createCq(url, repoid string, n int64) {
 	//disk
 	createCqParams = []byte(`{
 			"retention" : "qiniu_evm",
-			"sql": "SELECT mean(value) as value INTO disk_2m_mean FROM disk GROUP BY time(2m), region"
+			"sql": "SELECT mean(value) as value INTO disk_2m_mean FROM disk where time < now() GROUP BY time(2m), region"
 		}`)
 
 	get("create cq: disk_2m_mean", "POST", url+"/v1/repos/"+repoid+"/views/disk_2m_mean", createCqParams)
 
 	createCqParams = []byte(`{
 			"retention" : "qiniu_evm",
-			"sql": "SELECT count(value) as value INTO disk_2m_count FROM disk GROUP BY time(2m), region"
+			"sql": "SELECT count(value) as value INTO disk_2m_count FROM disk where time < now() GROUP BY time(2m), region"
 		}`)
 
 	get("create cq: disk_2m_count", "POST", url+"/v1/repos/"+repoid+"/views/disk_2m_count", createCqParams)
-
+	*/
 }

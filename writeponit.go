@@ -3,10 +3,11 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	_ "fmt"
 	"github.com/qiniu/log.v1"
 	_ "github.com/rakyll/ticktock"
 	_ "github.com/rakyll/ticktock/t"
+	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -19,6 +20,10 @@ func init() {
 
 type InfluxJob struct {
 	repoid string
+	repoN  int
+	debug  bool
+	cq     bool
+	pointN int
 	client *http.Client
 	url    string
 }
@@ -47,8 +52,31 @@ var (
 
 func (job *InfluxJob) Run() (err error) {
 
-	p := []Point{
-		Point{
+	/*	pp := []Point{
+			Point{
+				tag{
+					Host:   hosts[r1.Intn(4)],
+					Region: regions[r1.Intn(4)],
+				},
+				field{
+					Value: r2.Float32(),
+				},
+			},
+			Point{
+				tag{
+					Host:   hosts[r2.Intn(4)],
+					Region: regions[r2.Intn(4)],
+				},
+				field{
+					Value: r2.Float32(),
+				},
+			},
+		}
+	*/
+	p := make([]Point, 0)
+
+	for i := 0; i < job.pointN; i++ {
+		pp := Point{
 			tag{
 				Host:   hosts[r1.Intn(4)],
 				Region: regions[r1.Intn(4)],
@@ -56,16 +84,8 @@ func (job *InfluxJob) Run() (err error) {
 			field{
 				Value: r2.Float32(),
 			},
-		},
-		Point{
-			tag{
-				Host:   hosts[r1.Intn(4)],
-				Region: regions[r1.Intn(4)],
-			},
-			field{
-				Value: r2.Float32(),
-			},
-		},
+		}
+		p = append(p, pp)
 	}
 
 	buf, err := json.Marshal(p)
@@ -74,8 +94,11 @@ func (job *InfluxJob) Run() (err error) {
 	}
 
 	//writeto("--", "POST", job.url+"/v1/repos/"+job.repoid+"/series/"+series[r1.Intn(3)]+"/points", buf)
-	log.Debug(job.url+"/v1/repos/"+job.repoid+"/series/"+series[r1.Intn(3)]+"/points", string(buf))
-	req1, err := http.NewRequest("POST", job.url+"/v1/repos/"+job.repoid+"/series/"+series[r1.Intn(3)]+"/points", bytes.NewBuffer(buf))
+	if job.debug {
+		log.Debug(job.url+"/v1/repos/"+job.repoid+"/series/cpu/points", string(buf))
+
+	}
+	req1, err := http.NewRequest("POST", job.url+"/v1/repos/"+job.repoid+"/series/cpu/points", bytes.NewBuffer(buf))
 	if err != nil {
 		log.Error(err)
 	}
@@ -86,28 +109,37 @@ func (job *InfluxJob) Run() (err error) {
 	if err != nil {
 		log.Error(err)
 	}
-	defer resp1.Body.Close()
+	if job.debug {
+		ret, eerr := ioutil.ReadAll(resp1.Body)
+		if eerr != nil {
+			return
+		}
+		log.Info(string(ret))
 
+	}
+
+	defer resp1.Body.Close()
 	return
 
 }
 
-func Write(repoid, url, drt string, n int64) {
+func Write(job InfluxJob, url, drt string, n int64) {
 
-	client := &http.Client{}
-	job := &InfluxJob{repoid: repoid, client: client, url: "http://" + url}
+	var count, step int64
+	step = 1000
 
-	var total, count, step int64
-	step = 100
-
-	go createCq(url, repoid, n)
+	//go createCq(url, job.repoid, n)
+	count = 1
+	log.Debug(time.Now().String())
 
 	for {
 		count = count + 1
 		if count%step == 0 {
-			fmt.Printf("count:%d\n", count)
-			fmt.Printf("interval:%d ms\n", (total/step)/1000000)
-			total = 0
+			log.Debug("points count:", count, time.Now().String())
+			// total = 0
+		}
+		if count == step/10 && job.cq {
+			createCq(url, job.repoid, n)
 		}
 		job.Run()
 
