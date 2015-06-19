@@ -19,13 +19,18 @@ func init() {
 }
 
 type InfluxJob struct {
-	repoid string
-	repoN  int
-	debug  bool
-	cq     bool
-	pointN int
-	client *http.Client
-	url    string
+	repoid  string
+	repoN   int
+	debug   bool
+	cq      bool
+	method  string
+	pointN  int
+	client  *http.Client
+	url     string
+	threadn int
+
+	points int64
+	start  time.Time
 }
 
 type tag struct {
@@ -52,98 +57,104 @@ var (
 
 func (job *InfluxJob) Run() (err error) {
 
-	/*	pp := []Point{
-			Point{
-				tag{
-					Host:   hosts[r1.Intn(4)],
-					Region: regions[r1.Intn(4)],
-				},
-				field{
-					Value: r2.Float32(),
-				},
-			},
-			Point{
-				tag{
-					Host:   hosts[r2.Intn(4)],
-					Region: regions[r2.Intn(4)],
-				},
-				field{
-					Value: r2.Float32(),
-				},
-			},
+	//job.start = time.Now()
+	var step int64
+	step = 1000
+	for {
+		job.points += 1
+		if job.points%step == 0 {
+			last := int64(time.Now().Sub(job.start) / time.Second)
+			if last < 1 {
+				last = 1
+			}
+			log.Debug("insert total", job.points, "last ", last, "rate:", step/last, "avg rate:", job.points/last)
+
 		}
-	*/
-	p := make([]Point, 0)
-
-	for i := 0; i < job.pointN; i++ {
-		pp := Point{
-			tag{
-				Host:   hosts[r1.Intn(4)],
-				Region: regions[r1.Intn(4)],
-			},
-			field{
-				Value: r2.Float32(),
-			},
+		if job.points == 100 && job.cq {
+			go createCq(job.url, job.repoid, 10)
 		}
-		p = append(p, pp)
-	}
 
-	buf, err := json.Marshal(p)
-	if err != nil {
-		return
-	}
+		var dat []byte
+		if job.method == "json" {
+			//write json
+			p := make([]Point, 0)
 
-	//writeto("--", "POST", job.url+"/v1/repos/"+job.repoid+"/series/"+series[r1.Intn(3)]+"/points", buf)
-	if job.debug {
-		log.Debug(job.url+"/v1/repos/"+job.repoid+"/series/cpu/points", string(buf))
+			for i := 0; i < job.pointN; i++ {
+				pp := Point{
+					tag{
+						Host:   hosts[r1.Intn(4)],
+						Region: regions[r1.Intn(4)],
+					},
+					field{
+						Value: r2.Float32(),
+					},
+				}
+				p = append(p, pp)
+			}
 
-	}
-	req1, err := http.NewRequest("POST", job.url+"/v1/repos/"+job.repoid+"/series/cpu/points", bytes.NewBuffer(buf))
-	if err != nil {
-		log.Error(err)
-	}
+			buf, MarshalErr := json.Marshal(p)
+			if MarshalErr != nil {
+				return
+			}
+			dat = buf
 
-	req1.Header.Set("Authorization", "QiniuStub uid=1&ut=4")
-	req1.Header.Set("Content-Type", "application/json")
-	resp1, err := job.client.Do(req1)
-	if err != nil {
-		log.Error(err)
-	}
-	if job.debug {
-		ret, eerr := ioutil.ReadAll(resp1.Body)
-		if eerr != nil {
-			return
+		} else if job.method == "text" {
+			buf := []byte(`cpu,host=` + hosts[r1.Intn(4)] + `,region=` + regions[r1.Intn(4)] + ` value=0.64,temperature=37.6`)
+
+			dat = buf
 		}
-		log.Info(string(ret))
+
+		// write plain text
+
+		if job.debug {
+			log.Debug(job.url+"/v1/repos/"+job.repoid+"/series/cpu/points", string(dat))
+
+		}
+
+		req1, err := http.NewRequest("POST", job.url+"/v1/repos/"+job.repoid+"/series/cpu/points", bytes.NewBuffer(dat))
+		if err != nil {
+			log.Error(err)
+		}
+
+		req1.Header.Set("Authorization", "QiniuStub uid=1&ut=4")
+		if job.method == "json" {
+			req1.Header.Set("Content-Type", "application/json")
+		} else if job.method == "text" {
+			req1.Header.Set("Content-Type", "application/text")
+		}
+
+		resp1, err := job.client.Do(req1)
+		if err != nil {
+			log.Error(err)
+		}
+		if job.debug {
+			ret, eerr := ioutil.ReadAll(resp1.Body)
+			if eerr != nil {
+				return eerr
+			}
+			log.Info(string(ret))
+		}
+
+		defer resp1.Body.Close()
+
+		time.Sleep(time.Duration(0) * time.Millisecond)
 
 	}
-
-	defer resp1.Body.Close()
 	return
 
 }
 
 func Write(job InfluxJob, url, drt string, n int64) {
 
-	var count, step int64
-	step = 1000
+	//	var count, step int64
+	//	step = 1000
 
 	//go createCq(url, job.repoid, n)
-	count = 1
-	log.Debug(time.Now().String())
+	job.points = 1
+	job.start = time.Now()
 
-	for {
-		count = count + 1
-		if count%step == 0 {
-			log.Debug("points count:", count, time.Now().String())
-			// total = 0
-		}
-		if count == step/10 && job.cq {
-			createCq(url, job.repoid, n)
-		}
-		job.Run()
-
-		time.Sleep(time.Duration(n) * time.Millisecond)
+	for i := 0; i < job.threadn; i++ {
+		go job.Run()
 	}
 
 }
@@ -172,7 +183,7 @@ func WriteDefault(method string, n int64) (err error) {
 	database := "testDB"
 
 	go func() {
-		time.Sleep(time.Duration(n*100) * time.Millisecond)
+		time.Sleep(time.Duration(100) * time.Second)
 		log.Debug("create cq cpu_2m_count")
 		resp, err := http.Get("http://127.0.0.1:8086/query?q=" + url.QueryEscape("create continuous query cpu_2m_count on testDB begin select count(value) into cpu_2m_count from cpu where time < now() group by time(2m) end"))
 		if err != nil {
@@ -237,16 +248,16 @@ func WriteDefault(method string, n int64) (err error) {
 			time.Sleep(time.Duration(n) * time.Millisecond)
 		}
 	} else if method == "text" {
+		count := 0
+		log.Debug("start: ", time.Now().String())
 		for {
+			count += 1
 			dat := []byte(`cpu,host=` + hosts[r1.Intn(4)] + `,region=` + regions[r1.Intn(4)] + ` value=0.64,temperature=37.6`)
 			writeto("--", "POST", "http://127.0.0.1:8086/write?db="+database+"&rp=default", dat, method)
 
-			dat = []byte(`disk,host=` + hosts[r1.Intn(4)] + `,region=` + regions[r1.Intn(4)] + ` value=0.64,temperature=37.6`)
-			writeto("--", "POST", "http://127.0.0.1:8086/write?db="+database+"&rp=default", dat, method)
-
-			dat = []byte(`mem,host=` + hosts[r1.Intn(4)] + `,region=` + regions[r1.Intn(4)] + ` value=0.64,temperature=37.6`)
-			writeto("--", "POST", "http://127.0.0.1:8086/write?db="+database+"&rp=default", dat, method)
-
+			if count%1000 == 0 {
+				log.Debug("end: ", time.Now().String())
+			}
 			time.Sleep(time.Duration(n) * time.Millisecond)
 		}
 

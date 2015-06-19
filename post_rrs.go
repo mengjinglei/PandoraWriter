@@ -43,15 +43,13 @@ func get(cmd, action, url string, dat []byte) {
 }
 
 func writeto(cmd, action, url string, dat []byte, method string) {
-	//log.Debug("delete series")
+
 	client := &http.Client{}
-	log.Debug(action, url, method)
 	req, err := http.NewRequest(action, url, bytes.NewBuffer(dat))
 	if err != nil {
 		log.Error(err)
 	}
 
-	//req.Header.Set("Authorization", "QiniuStub uid=1&ut=4")
 	if dat != nil {
 		if method == "json" {
 			req.Header.Set("Content-Type", "application/json")
@@ -60,7 +58,6 @@ func writeto(cmd, action, url string, dat []byte, method string) {
 		}
 	}
 
-	log.Debug(req.Header, req.Body)
 	resp, err := client.Do(req)
 	if err != nil {
 		log.Error(err)
@@ -72,9 +69,9 @@ func writeto(cmd, action, url string, dat []byte, method string) {
 		log.Error(err)
 	}
 	if string(_bytes) == "{}" {
-		log.Info("ok")
+		//log.Info("ok")
 	} else {
-		log.Info(string(_bytes))
+		//log.Info(string(_bytes))
 	}
 }
 

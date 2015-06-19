@@ -19,6 +19,7 @@ func main() {
 	debug := flag.Bool("d", false, "debug, default false")
 	method := flag.String("method", "text", "write data points in application/json format or text/plain")
 	cq := flag.Bool("cq", false, "specify whether create cq during writing data points, default false")
+	threadn := flag.Int("threadn", 1, "specify how many threads write data cocurrently")
 
 	flag.Parse()
 
@@ -27,9 +28,15 @@ func main() {
 		return
 	}
 
-	log.Debug("cmd:%s,url:%s,repo:%s,repoN:%d,interval:%d ms, method:%s", *f, *URL, *repo, *repoN, *interval, *method)
+	log.Printf("cmd:%s,url:%s,repo:%s,repoN:%d,interval:%d ms, method:%s", *f, *URL, *repo, *repoN, *interval, *method)
 
 	http.Get("http://localhost:8086/query?q=CREATE+DATABASE+foo_test")
+
+	tr := &http.Transport{
+		DisableCompression: true,
+		DisableKeepAlives:  true,
+	}
+	client := &http.Client{Transport: tr}
 
 	if *f == "test" {
 
@@ -44,37 +51,41 @@ func main() {
 		return
 
 	} else if *f == "write" {
-		client := &http.Client{}
+		//client := &http.Client{}
 
-		job := InfluxJob{repoid: *repo, debug: *debug, client: client, repoN: *repoN, pointN: *pointN, url: "http://" + *URL}
+		job := InfluxJob{repoid: *repo, threadn: *threadn, debug: *debug, method: *method, client: client, repoN: *repoN, pointN: *pointN, url: "http://" + *URL}
 
-		log.Info(">>>>>>>>>>>start write repo:", *repo)
+		log.Info("start write repo:", *repo)
 		if *repo == "" {
 			log.Error("repo cannot be null!")
 		} else {
 			Write(job, *URL, "", *interval)
 		}
+		time.Sleep(time.Duration(*minute) * time.Minute)
+
 		return
 
 	} else if *f == "all" {
 
 		for i := 0; i < *repoN; i++ {
-			log.Info(">>>>>>>>>>>>start create")
+			log.Info("start create")
 			repoid := Create(*URL)
-			//go func() {
-			log.Info("create repo", repoid, "complete")
-			log.Info("start to write", repoid, "to", *URL, "interval", *interval, "ms")
-			client := &http.Client{}
+			go func() {
+				log.Info("create repo", repoid, "complete")
+				log.Info("start to write", repoid, "to", *URL, "interval", *interval, "ms")
+				//client := &http.Client{}
 
-			job := InfluxJob{repoid: repoid, cq: *cq, debug: *debug, client: client, repoN: *repoN, pointN: *pointN, url: "http://" + *URL}
+				job := InfluxJob{repoid: repoid, cq: *cq, threadn: *threadn, method: *method, debug: *debug, client: client, repoN: *repoN, pointN: *pointN, url: "http://" + *URL}
 
-			Write(job, *URL, "", *interval)
-			//}()
+				Write(job, *URL, "", *interval)
+			}()
 			time.Sleep(time.Duration(2) * time.Second)
 
 		}
 
 		time.Sleep(time.Duration(*minute) * time.Minute)
+	} else if *f == "createcq" {
+		createCq(*URL, *repo, 0)
 	}
 
 }
