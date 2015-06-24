@@ -7,6 +7,7 @@ import (
 	"github.com/qiniu/log.v1"
 	_ "github.com/rakyll/ticktock"
 	_ "github.com/rakyll/ticktock/t"
+	"io"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
@@ -29,8 +30,10 @@ type InfluxJob struct {
 	url     string
 	threadn int
 
-	points int64
-	start  time.Time
+	points    int64
+	start     time.Time
+	totalLast int64
+	pointSize int64
 }
 
 type tag struct {
@@ -63,12 +66,15 @@ func (job *InfluxJob) Run() (err error) {
 	for {
 		job.points += 1
 		if job.points%step == 0 {
-			last := int64(time.Now().Sub(job.start) / time.Second)
+			last := int64(time.Now().Sub(job.start) / time.Millisecond)
 			if last < 1 {
 				last = 1
 			}
-			log.Debug("insert total", job.points, "last ", last, "rate:", step/last, "avg rate:", job.points/last)
-
+			job.totalLast += last
+			rate := (step * 1000) / last
+			avgRate := (job.points * 1000) / job.totalLast
+			log.Debug("point size", job.pointSize, " insert total", job.points, "last ", last, "rate:", rate, job.pointSize*rate/1024, "avg rate:", avgRate, job.pointSize*avgRate/1024)
+			job.start = time.Now()
 		}
 		if job.points == 100 && job.cq {
 			go createCq(job.url, job.repoid, 10)
@@ -99,18 +105,21 @@ func (job *InfluxJob) Run() (err error) {
 			dat = buf
 
 		} else if job.method == "text" {
-			buf := []byte(`cpu,host=` + hosts[r1.Intn(4)] + `,region=` + regions[r1.Intn(4)] + ` value=0.64,temperature=37.6`)
-
-			dat = buf
+			var pts string
+			for i := 0; i < job.pointN; i++ {
+				pt := "host=" + hosts[r1.Intn(4)] + ",region=" + regions[r1.Intn(4)] + " value=0.64,temperature=37.6\n"
+				pts += pt
+			}
+			dat = []byte(pts)
 		}
 
 		// write plain text
 
 		if job.debug {
-			log.Debug(job.url+"/v1/repos/"+job.repoid+"/series/cpu/points", string(dat))
+			log.Debug(job.url+"/v1/repos/"+job.repoid+"/series/cpu/points", string(dat), len(dat))
 
 		}
-
+		job.pointSize = int64(len(dat))
 		req1, err := http.NewRequest("POST", job.url+"/v1/repos/"+job.repoid+"/series/cpu/points", bytes.NewBuffer(dat))
 		if err != nil {
 			log.Error(err)
@@ -136,6 +145,7 @@ func (job *InfluxJob) Run() (err error) {
 		}
 
 		defer resp1.Body.Close()
+		io.Copy(ioutil.Discard, resp1.Body)
 
 		time.Sleep(time.Duration(0) * time.Millisecond)
 
@@ -152,6 +162,7 @@ func Write(job InfluxJob, url, drt string, n int64) {
 	//go createCq(url, job.repoid, n)
 	job.points = 1
 	job.start = time.Now()
+	job.totalLast = 0
 
 	for i := 0; i < job.threadn; i++ {
 		go job.Run()

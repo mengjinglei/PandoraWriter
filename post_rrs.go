@@ -148,7 +148,7 @@ func createCq(url, repoid string, n int64) {
 	}
 	time.Sleep(time.Duration(n) * time.Second)
 
-	url = "http://" + url
+	//url = "http://" + url
 	//cpu
 	createCqParams := []byte(`{
 			"retention" : "qiniu_evm",
