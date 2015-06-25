@@ -3,9 +3,10 @@ package main
 import (
 	"flag"
 	_ "fmt"
-	"github.com/qiniu/log.v1"
 	"net/http"
 	"time"
+
+	"github.com/qiniu/log.v1"
 )
 
 func main() {
@@ -53,7 +54,7 @@ func main() {
 	} else if *f == "write" {
 		//client := &http.Client{}
 
-		job := InfluxJob{repoid: *repo, threadn: *threadn, debug: *debug, method: *method, client: client, repoN: *repoN, pointN: *pointN, url: "http://" + *URL}
+		job := InfluxJob{repoid: *repo, threadn: *threadn, interval: *interval, debug: *debug, method: *method, client: client, repoN: *repoN, pointN: *pointN, url: "http://" + *URL}
 
 		log.Info("start write repo:", *repo)
 		if *repo == "" {
@@ -75,7 +76,7 @@ func main() {
 				log.Info("start to write", repoid, "to", *URL, "interval", *interval, "ms")
 				//client := &http.Client{}
 
-				job := InfluxJob{repoid: repoid, cq: *cq, threadn: *threadn, method: *method, debug: *debug, client: client, repoN: *repoN, pointN: *pointN, url: "http://" + *URL}
+				job := InfluxJob{repoid: repoid, cq: *cq, threadn: *threadn, interval: *interval, method: *method, debug: *debug, client: client, repoN: *repoN, pointN: *pointN, url: "http://" + *URL}
 
 				Write(job, *URL, "", *interval)
 			}()

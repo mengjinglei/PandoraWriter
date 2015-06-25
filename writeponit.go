@@ -4,15 +4,18 @@ import (
 	"bytes"
 	"encoding/json"
 	_ "fmt"
-	"github.com/qiniu/log.v1"
-	_ "github.com/rakyll/ticktock"
-	_ "github.com/rakyll/ticktock/t"
 	"io"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/qiniu/http/httputil.v1"
+
+	"github.com/qiniu/log.v1"
+	_ "github.com/rakyll/ticktock"
+	_ "github.com/rakyll/ticktock/t"
 )
 
 func init() {
@@ -20,15 +23,16 @@ func init() {
 }
 
 type InfluxJob struct {
-	repoid  string
-	repoN   int
-	debug   bool
-	cq      bool
-	method  string
-	pointN  int
-	client  *http.Client
-	url     string
-	threadn int
+	repoid   string
+	repoN    int
+	debug    bool
+	cq       bool
+	method   string
+	pointN   int
+	client   *http.Client
+	url      string
+	threadn  int
+	interval int64
 
 	points    int64
 	start     time.Time
@@ -136,18 +140,27 @@ func (job *InfluxJob) Run() (err error) {
 		if err != nil {
 			log.Error(err)
 		}
+
+		if resp1.StatusCode != 200 {
+			err := httputil.NewError(600, "write data point fail, status code is "+string(resp1.StatusCode))
+			log.Debug(err)
+			log.Debug(resp1.StatusCode, resp1.Status)
+			return err
+		}
+
 		if job.debug {
 			ret, eerr := ioutil.ReadAll(resp1.Body)
 			if eerr != nil {
 				return eerr
 			}
+
 			log.Info(string(ret))
 		}
 
 		defer resp1.Body.Close()
 		io.Copy(ioutil.Discard, resp1.Body)
 
-		time.Sleep(time.Duration(0) * time.Millisecond)
+		time.Sleep(time.Duration(job.interval) * time.Millisecond)
 
 	}
 	return

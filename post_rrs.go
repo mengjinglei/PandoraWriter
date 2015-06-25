@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	_ "fmt"
-	"github.com/qiniu/log.v1"
 	"io/ioutil"
 	"net/http"
 	"time"
+
+	"github.com/qiniu/log.v1"
 )
 
 func get(cmd, action, url string, dat []byte) {
@@ -94,6 +95,11 @@ func Create(url string) string {
 	if err != nil {
 		log.Error(err)
 	}
+	if resp.StatusCode != 200 {
+		log.Error("create repo fail", resp.StatusCode)
+		dat, _ := ioutil.ReadAll(resp.Body)
+		log.Debug(string(dat))
+	}
 
 	defer resp.Body.Close()
 
@@ -152,17 +158,24 @@ func createCq(url, repoid string, n int64) {
 	//cpu
 	createCqParams := []byte(`{
 			"retention" : "qiniu_evm",
-			"sql": "SELECT mean(value) as value INTO cpu_2m_mean FROM cpu where time < now() GROUP BY time(2m), region"
+			"sql": "SELECT mean(value) as value INTO cpu_2m_mean FROM cpu  GROUP BY time(2m), region, host"
 		}`)
 
 	get("create cq: cpu_2m_mean", "POST", url+"/v1/repos/"+repoid+"/views/cpu_2m_mean", createCqParams)
 
 	createCqParams = []byte(`{
 			"retention" : "qiniu_evm",
-			"sql": "SELECT count(value) as value INTO cpu_2m_count FROM cpu where time < now() GROUP BY time(2m), region"
+			"sql": "SELECT count(value) as value INTO cpu_2m_count FROM cpu  GROUP BY time(2m), region, host"
 		}`)
 
 	get("create cq: cpu_2m_count", "POST", url+"/v1/repos/"+repoid+"/views/cpu_2m_count", createCqParams)
+
+	createCqParams = []byte(`{
+			"retention" : "qiniu_evm",
+			"sql": "SELECT sum(value) as value INTO cpu_2m_sum FROM cpu  GROUP BY time(2m), region"
+		}`)
+
+	get("create cq: cpu_2m_count", "POST", url+"/v1/repos/"+repoid+"/views/cpu_2m_sum", createCqParams)
 
 	/*//mem
 	createCqParams = []byte(`{
