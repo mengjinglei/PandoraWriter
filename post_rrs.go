@@ -77,7 +77,7 @@ func writeto(cmd, action, url string, dat []byte, method string) {
 }
 
 //连着API gate的测试用, 不对代码进行任何封装
-func Create(url string) string {
+func Create(url string, cq bool) string {
 
 	url = "http://" + url
 	log.SetOutputLevel(0)
@@ -143,36 +143,38 @@ func Create(url string) string {
 
 	get("create series: qiniu_evm.disk", "POST", url+"/v1/repos/"+repo["id"]+"/series/disk", seriesParamsDisk)
 
+	if cq {
+		createCq(url, repo["id"], 2)
+	}
 	return repo["id"]
 
 }
 
 func createCq(url, repoid string, n int64) {
 
-	if n < 10 {
-		n = 10
-	}
 	time.Sleep(time.Duration(n) * time.Second)
 
 	//url = "http://" + url
 	//cpu
 	createCqParams := []byte(`{
 			"retention" : "qiniu_evm",
-			"sql": "SELECT mean(value) as value INTO cpu_2m_mean FROM cpu  GROUP BY time(2m), region, host"
+			"sql": "SELECT mean(value) as value INTO cpu_2m_mean FROM cpu where time < now() GROUP BY time(2m), region, host"
 		}`)
 
 	get("create cq: cpu_2m_mean", "POST", url+"/v1/repos/"+repoid+"/views/cpu_2m_mean", createCqParams)
+	time.Sleep(time.Duration(n) * time.Second)
 
 	createCqParams = []byte(`{
 			"retention" : "qiniu_evm",
-			"sql": "SELECT count(value) as value INTO cpu_2m_count FROM cpu  GROUP BY time(2m), region, host"
+			"sql": "SELECT count(value) as value INTO cpu_2m_count FROM cpu where time < now() GROUP BY time(2m), region, host"
 		}`)
 
 	get("create cq: cpu_2m_count", "POST", url+"/v1/repos/"+repoid+"/views/cpu_2m_count", createCqParams)
+	time.Sleep(time.Duration(n) * time.Second)
 
 	createCqParams = []byte(`{
 			"retention" : "qiniu_evm",
-			"sql": "SELECT sum(value) as value INTO cpu_2m_sum FROM cpu  GROUP BY time(2m), region"
+			"sql": "SELECT sum(value) as value INTO cpu_2m_sum FROM cpu where time < now() GROUP BY time(2m), region"
 		}`)
 
 	get("create cq: cpu_2m_count", "POST", url+"/v1/repos/"+repoid+"/views/cpu_2m_sum", createCqParams)

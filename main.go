@@ -19,7 +19,7 @@ func main() {
 	minute := flag.Int64("minute", 16, "minute to run the test")
 	debug := flag.Bool("d", false, "debug, default false")
 	method := flag.String("method", "text", "write data points in application/json format or text/plain")
-	cq := flag.Bool("cq", false, "specify whether create cq during writing data points, default false")
+	Cq := flag.Bool("cq", true, "specify whether create cq during writing data points, default false")
 	threadn := flag.Int("threadn", 1, "specify how many threads write data cocurrently")
 
 	flag.Parse()
@@ -30,8 +30,6 @@ func main() {
 	}
 
 	log.Printf("cmd:%s,url:%s,repo:%s,repoN:%d,interval:%d ms, method:%s", *f, *URL, *repo, *repoN, *interval, *method)
-
-	http.Get("http://localhost:8086/query?q=CREATE+DATABASE+foo_test")
 
 	tr := &http.Transport{
 		DisableCompression: true,
@@ -47,7 +45,7 @@ func main() {
 	} else if *f == "create" {
 
 		for i := 0; i < *repoN; i++ {
-			Create(*URL)
+			Create(*URL, *Cq)
 		}
 		return
 
@@ -70,13 +68,13 @@ func main() {
 
 		for i := 0; i < *repoN; i++ {
 			log.Info("start create")
-			repoid := Create(*URL)
+			repoid := Create(*URL, *Cq)
 			go func() {
 				log.Info("create repo", repoid, "complete")
 				log.Info("start to write", repoid, "to", *URL, "interval", *interval, "ms")
 				//client := &http.Client{}
 
-				job := InfluxJob{repoid: repoid, cq: *cq, threadn: *threadn, interval: *interval, method: *method, debug: *debug, client: client, repoN: *repoN, pointN: *pointN, url: "http://" + *URL}
+				job := InfluxJob{repoid: repoid, cq: *Cq, threadn: *threadn, interval: *interval, method: *method, debug: *debug, client: client, repoN: *repoN, pointN: *pointN, url: "http://" + *URL}
 
 				Write(job, *URL, "", *interval)
 			}()
@@ -85,8 +83,6 @@ func main() {
 		}
 
 		time.Sleep(time.Duration(*minute) * time.Minute)
-	} else if *f == "createcq" {
-		createCq(*URL, *repo, 0)
 	}
 
 }

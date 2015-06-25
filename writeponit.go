@@ -13,9 +13,8 @@ import (
 
 	"github.com/qiniu/http/httputil.v1"
 
+	"github.com/influxdb/influxdb/client"
 	"github.com/qiniu/log.v1"
-	_ "github.com/rakyll/ticktock"
-	_ "github.com/rakyll/ticktock/t"
 )
 
 func init() {
@@ -38,6 +37,7 @@ type InfluxJob struct {
 	start     time.Time
 	totalLast int64
 	pointSize int64
+	con       *client.Client
 }
 
 type tag struct {
