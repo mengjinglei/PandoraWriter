@@ -67,6 +67,7 @@ func (job *InfluxJob) Run() (err error) {
 	//job.start = time.Now()
 	var step int64
 	step = 1000
+	var dat []byte
 	for {
 		job.points += 1
 		if job.points%step == 0 {
@@ -84,7 +85,6 @@ func (job *InfluxJob) Run() (err error) {
 			go createCq(job.url, job.repoid, 10)
 		}
 
-		var dat []byte
 		if job.method == "json" {
 			//write json
 			p := make([]Point, 0)
