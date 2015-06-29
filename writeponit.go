@@ -13,6 +13,10 @@ import (
 
 	"github.com/qiniu/http/httputil.v1"
 
+	"runtime/pprof"
+
+	"os"
+
 	"github.com/influxdb/influxdb/client"
 	"github.com/qiniu/log.v1"
 )
@@ -67,7 +71,13 @@ func (job *InfluxJob) Run() (err error) {
 	//job.start = time.Now()
 	var step int64
 	step = 1000
-	var dat []byte
+	var dat bytes.Buffer
+	f, err := os.Create("heap.prof")
+	if err != nil {
+		log.Fatal(err)
+	}
+	pprof.WriteHeapProfile(f)
+	p := make([]*Point, 0)
 	for {
 		job.points += 1
 		if job.points%step == 0 {
@@ -87,10 +97,10 @@ func (job *InfluxJob) Run() (err error) {
 
 		if job.method == "json" {
 			//write json
-			p := make([]Point, 0)
 
+			p = p[:0]
 			for i := 0; i < job.pointN; i++ {
-				pp := Point{
+				pp := &Point{
 					tag{
 						Host:   hosts[r1.Intn(4)],
 						Region: regions[r1.Intn(4)],
@@ -106,7 +116,7 @@ func (job *InfluxJob) Run() (err error) {
 			if MarshalErr != nil {
 				return
 			}
-			dat = buf
+			dat.WriteString(string(buf))
 
 		} else if job.method == "text" {
 			var pts string
@@ -114,17 +124,17 @@ func (job *InfluxJob) Run() (err error) {
 				pt := "host=" + hosts[r1.Intn(4)] + ",region=" + regions[r1.Intn(4)] + " value=0.64,temperature=37.6\n"
 				pts += pt
 			}
-			dat = []byte(pts)
+			dat.WriteString(string(pts))
 		}
 
 		// write plain text
 
 		if job.debug {
-			log.Debug(job.url+"/v1/repos/"+job.repoid+"/series/cpu/points", string(dat), len(dat))
+			log.Debug(job.url+"/v1/repos/"+job.repoid+"/series/cpu/points", dat.String())
 
 		}
-		job.pointSize = int64(len(dat))
-		req1, err := http.NewRequest("POST", job.url+"/v1/repos/"+job.repoid+"/series/cpu/points", bytes.NewBuffer(dat))
+		job.pointSize = int64(dat.Len())
+		req1, err := http.NewRequest("POST", job.url+"/v1/repos/"+job.repoid+"/series/cpu/points", &dat)
 		if err != nil {
 			log.Error(err)
 		}
@@ -178,7 +188,7 @@ func Write(job InfluxJob, url, drt string, n int64) {
 	job.totalLast = 0
 
 	for i := 0; i < job.threadn; i++ {
-		go job.Run()
+		job.Run()
 	}
 
 }
