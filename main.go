@@ -15,14 +15,17 @@ func main() {
 	repo := flag.String("repo", "", "repoid")
 	repoN := flag.Int("repon", 1, "the number of repo to write data point to")
 	pointN := flag.Int("pointn", 1, "the number of points with one write operation")
-	interval := flag.Int64("n", 0, "ms")
+	interval := flag.Int64("n", 500, "ms")
 	minute := flag.Int64("minute", 16, "minute to run the test")
 	debug := flag.Bool("d", false, "debug, default false")
 	method := flag.String("method", "text", "write data points in application/json format or text/plain")
 	Cq := flag.Bool("cq", true, "specify whether create cq during writing data points, default false")
 	threadn := flag.Int("threadn", 1, "specify how many threads write data cocurrently")
+	Series := flag.String("series", "", "specify which series to write data in")
 
 	flag.Parse()
+
+	done := make(chan bool, 1)
 
 	if *f == "" {
 		log.Fatal("You have to specify the method to run!")
@@ -51,8 +54,11 @@ func main() {
 
 	} else if *f == "write" {
 		//client := &http.Client{}
+		if *Series == "" {
+			log.Fatal("series must specified")
+		}
 
-		job := InfluxJob{repoid: *repo, threadn: *threadn, interval: *interval, debug: *debug, method: *method, client: client, repoN: *repoN, pointN: *pointN, url: "http://" + *URL}
+		job := InfluxJob{repoid: *repo, series: *Series, threadn: *threadn, interval: *interval, debug: *debug, method: *method, client: client, repoN: *repoN, pointN: *pointN, url: "http://" + *URL}
 
 		log.Info("start write repo:", *repo)
 		if *repo == "" {
@@ -82,7 +88,8 @@ func main() {
 
 		}
 
-		time.Sleep(time.Duration(*minute) * time.Minute)
+		//time.Sleep(time.Duration(*minute) * time.Minute)
+		<-done
 	}
 
 }

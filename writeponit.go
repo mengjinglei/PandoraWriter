@@ -13,10 +13,6 @@ import (
 
 	"github.com/qiniu/http/httputil.v1"
 
-	"runtime/pprof"
-
-	"os"
-
 	"github.com/influxdb/influxdb/client"
 	"github.com/qiniu/log.v1"
 )
@@ -31,6 +27,7 @@ type InfluxJob struct {
 	debug    bool
 	cq       bool
 	method   string
+	series   string
 	pointN   int
 	client   *http.Client
 	url      string
@@ -72,12 +69,7 @@ func (job *InfluxJob) Run() (err error) {
 	var step int64
 	step = 1000
 	var dat bytes.Buffer
-	f, err := os.Create("heap.prof")
-	if err != nil {
-		log.Fatal(err)
-	}
-	pprof.WriteHeapProfile(f)
-	p := make([]*Point, 0)
+
 	for {
 		job.points += 1
 		if job.points%step == 0 {
@@ -95,33 +87,10 @@ func (job *InfluxJob) Run() (err error) {
 			go createCq(job.url, job.repoid, 10)
 		}
 
-		if job.method == "json" {
-			//write json
-
-			p = p[:0]
-			for i := 0; i < job.pointN; i++ {
-				pp := &Point{
-					tag{
-						Host:   hosts[r1.Intn(4)],
-						Region: regions[r1.Intn(4)],
-					},
-					field{
-						Value: r2.Float32(),
-					},
-				}
-				p = append(p, pp)
-			}
-
-			buf, MarshalErr := json.Marshal(p)
-			if MarshalErr != nil {
-				return
-			}
-			dat.WriteString(string(buf))
-
-		} else if job.method == "text" {
+		if job.method == "text" {
 			var pts string
 			for i := 0; i < job.pointN; i++ {
-				pt := "host=" + hosts[r1.Intn(4)] + ",region=" + regions[r1.Intn(4)] + " value=0.64,temperature=37.6\n"
+				pt := job.series + ",host=" + hosts[r1.Intn(4)] + ",region=" + regions[r1.Intn(4)] + " value=0.64,temperature=37.6\n"
 				pts += pt
 			}
 			dat.WriteString(string(pts))
@@ -130,20 +99,18 @@ func (job *InfluxJob) Run() (err error) {
 		// write plain text
 
 		if job.debug {
-			log.Debug(job.url+"/v1/repos/"+job.repoid+"/series/cpu/points", dat.String())
+			log.Debug(job.url+"/v1/repos/"+job.repoid+"/points", dat.String())
 
 		}
 		job.pointSize = int64(dat.Len())
-		req1, err := http.NewRequest("POST", job.url+"/v1/repos/"+job.repoid+"/series/cpu/points", &dat)
+		req1, err := http.NewRequest("POST", job.url+"/v1/repos/"+job.repoid+"/points", &dat)
 		if err != nil {
 			log.Error(err)
 		}
 
 		req1.Header.Set("Authorization", "QiniuStub uid=1&ut=4")
-		if job.method == "json" {
-			req1.Header.Set("Content-Type", "application/json")
-		} else if job.method == "text" {
-			req1.Header.Set("Content-Type", "application/text")
+		if job.method == "text" {
+			req1.Header.Set("Content-Type", "text/plain")
 		}
 
 		resp1, err := job.client.Do(req1)
@@ -220,20 +187,6 @@ func WriteDefault(method string, n int64) (err error) {
 		time.Sleep(time.Duration(100) * time.Second)
 		log.Debug("create cq cpu_2m_count")
 		resp, err := http.Get("http://127.0.0.1:8086/query?q=" + url.QueryEscape("create continuous query cpu_2m_count on testDB begin select count(value) into cpu_2m_count from cpu where time < now() group by time(2m) end"))
-		if err != nil {
-			return
-		}
-		log.Debug(resp)
-
-		log.Debug("create cq mem_2m_mean")
-		resp, err = http.Get("http://127.0.0.1:8086/query?q=" + url.QueryEscape("create continuous query mem_2m_mean on testDB begin select count(value) into mem_2m_mean from mem where time < now() group by time(2m) end"))
-		if err != nil {
-			return
-		}
-		log.Debug(resp)
-
-		log.Debug("create cq disk_3m_max")
-		resp, err = http.Get("http://127.0.0.1:8086/query?q=" + url.QueryEscape("create continuous query disk_3m_max on testDB begin select count(value) into disk_3m_max from disk where time < now() group by time(3m) end"))
 		if err != nil {
 			return
 		}
