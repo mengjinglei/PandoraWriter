@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	_ "fmt"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/qiniu/http/httputil.v1"
+	"github.com/qiniu/rpc.v3/lb"
 
 	"github.com/influxdb/influxdb/client"
 	"github.com/qiniu/log.v1"
@@ -172,7 +173,19 @@ type influxWrite struct {
 	Points    []influxPoint `json:"points"`
 }
 
-func WriteDefault(method string, n int64) (err error) {
+func Curl(client *lb.Client, n int64) (err error) {
+	for {
+		req := fmt.Sprintf("req,code=%d value=%d", (rand.Intn(5)+1)*100, rand.Intn(10))
+		url := fmt.Sprintf("/v1/repos/mockRepoid/points")
+		err = client.CallWithJson(nil, nil, "POST", url, req)
+		if err != nil {
+			log.Debug(err)
+		}
+	}
+	return
+}
+
+func WriteInfluxdb(method string, n int64) (err error) {
 
 	resp, err := http.Get("http://127.0.0.1:8086/query?q=DROP+DATABASE+testDB")
 	resp, err = http.Get("http://127.0.0.1:8086/query?q=CREATE+DATABASE+testDB")

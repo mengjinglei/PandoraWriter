@@ -6,12 +6,17 @@ import (
 	"net/http"
 	"time"
 
+	"qiniu.com/auth/authstub.v1"
+	"qiniu.com/auth/proto.v1"
+
 	"github.com/qiniu/log.v1"
+	"github.com/qiniu/rpc.v3"
+	"github.com/qiniu/rpc.v3/lb"
 )
 
 func main() {
 	f := flag.String("f", "all", "specify which method to run:\n\t<all>: <create> + <write>\n\t<create>:create repoid,series and rp\n\t<write>: write data point\n\t<test>: =<all> operate direct on influxdb:8086")
-	URL := flag.String("url", "127.0.0.1:7777", "url when create metadata and write data point")
+	URL := flag.String("url", "http://127.0.0.1:8899", "url when create metadata and write data point")
 	repo := flag.String("repo", "", "repoid")
 	repoN := flag.Int("repon", 1, "the number of repo to write data point to")
 	pointN := flag.Int("pointn", 1, "the number of points with one write operation")
@@ -40,9 +45,17 @@ func main() {
 	}
 	client := &http.Client{Transport: tr}
 
-	if *f == "test" {
+	if *f == "curl" {
+		client, err := newLbClient([]string{*URL})
+		if err != nil {
+			log.Debug(err)
+			return
+		}
+		Curl(client, *interval)
+		return
+	} else if *f == "test" {
 
-		WriteDefault(*method, *interval)
+		WriteInfluxdb(*method, *interval)
 		return
 
 	} else if *f == "create" {
@@ -92,4 +105,35 @@ func main() {
 		<-done
 	}
 
+}
+
+func newLbClient(hosts []string) (lbclient *lb.Client, err error) {
+
+	var t http.RoundTripper
+	tc := &rpc.TransportConfig{
+		DialTimeout:           time.Second * 10,
+		ResponseHeaderTimeout: time.Second * 10,
+	}
+	t = rpc.NewTransport(tc)
+
+	si := &proto.SudoerInfo{
+		UserInfo: proto.UserInfo{
+			Uid:   1,
+			Utype: 4,
+		},
+	}
+	t = authstub.NewTransport(si, t)
+
+	lbConfig := &lb.Config{
+		Http:              &http.Client{Transport: t},
+		FailRetryInterval: 0,
+		TryTimes:          1,
+	}
+
+	lbclient, err = lb.New(hosts, lbConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	return
 }
