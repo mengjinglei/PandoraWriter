@@ -180,6 +180,7 @@ func Curl(client *lb.Client, n int64) (err error) {
 		err = client.CallWithJson(nil, nil, "POST", url, req)
 		if err != nil {
 			log.Debug(err)
+
 		}
 	}
 	return
@@ -265,4 +266,14 @@ func WriteInfluxdb(method string, n int64) (err error) {
 
 	return
 
+}
+
+func PointsGenerator(n int) (ret []byte) {
+	for i := 0; i < n; i++ {
+		dat := []byte(`cpu,host=` + hosts[r1.Intn(4)] + `,region=` + regions[r1.Intn(4)] + ` value=0.64,temperature=37.6`)
+		dat = append(dat, '\n')
+		ret = append(ret, dat...)
+	}
+
+	return
 }
