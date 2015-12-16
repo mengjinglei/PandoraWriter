@@ -57,6 +57,8 @@ func main() {
 	case "pandora":
 		log.Info("not implement yet!")
 		return
+	case "http":
+		tester.Client = NewHttpTester(&conf)
 	}
 
 	tester.Test()

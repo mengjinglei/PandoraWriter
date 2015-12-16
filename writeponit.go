@@ -270,8 +270,10 @@ func WriteInfluxdb(method string, n int64) (err error) {
 
 func PointsGenerator(n int) (ret []byte) {
 	for i := 0; i < n; i++ {
-		dat := []byte(`cpu,host=` + hosts[r1.Intn(4)] + `,region=` + regions[r1.Intn(4)] + ` value=0.64,temperature=37.6`)
-		dat = append(dat, '\n')
+		dat := []byte(`cpu,host=` + hosts[r1.Intn(4)] + `,region=` + regions[r1.Intn(4)] + ` value=` + fmt.Sprintf("%f", r1.Float64()) + `,temperature=` + fmt.Sprintf("%f", r1.Float64()*40))
+		if i != n-1 {
+			dat = append(dat, '\n')
+		}
 		ret = append(ret, dat...)
 	}
 
